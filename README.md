@@ -1,2 +1,209 @@
-# google_capstone_project
+# Google Capstone Project
 This is the Capstone project as a part of the Google Data Analyst Certificate
+
+---
+title: "Google Capstone Project"
+author: "Nikshita Kurva"
+date: "2022-07-30"
+output: html_document
+---
+
+#Scenario
+Bellabeat is a startup company that focuses on health-focused smart devices for women. However, the cofounder of Bellabeat, Urška Sršen, believes that by analyzing fitness data, the company can grow to be a bigger part of the global smart device market. Bellabeat's current products are Bellabeat App, Leaf, Time, and Spring.
+
+# Questions
+1. What are some trends in smart device usage?
+2. How could these trends apply to Bellabeat customers?
+3. How could these trends help influence Bellabeat marketing strategy?
+
+# Business Task
+Analyze current FitBit usage data to identify potential growth opportunities for Bellabeat marketing strategies for Bellabeat's cofounders, Urška Sršen and Sando Mur, as well as the Bellabeat marketing analytics team.
+
+# Notes about the data
+This data is collected by FitBit, so it's reliable, credible, and organized. Since we weren't given information about the people who consented to give their data, I'm going to assume they're people that Bellabeat is potentially marketing towards for the sake of this case study. This dataset includes information of a maximum of 33 people who have given their consent for their metrics to be used for this case study. It's organized by user, and then by the day/hour of the day, making it easy to sort through the data. The dataset given by "FitBit Fitness Tracker Data" on Kaggle by Mobius is the only dataset used in this casestudy.
+
+## Install and Load Packages
+```{r}
+library(tidyverse)
+library(lubridate)
+```
+
+## Import Datasets
+```{r}
+read.csv("~/Downloads/Fitabase Data 4.12.16-5.12.16/dailyActivity_merged.csv") -> activity
+read.csv("~/Downloads/Fitabase Data 4.12.16-5.12.16/hourlyCalories_merged.csv") -> calories
+read.csv("~/Downloads/Fitabase Data 4.12.16-5.12.16/dailySteps_merged.csv") -> dailySteps
+read.csv("~/Downloads/Fitabase Data 4.12.16-5.12.16/hourlySteps_merged.csv") -> hourlySteps
+read.csv("~/Downloads/Fitabase Data 4.12.16-5.12.16/sleepDay_merged.csv") -> sleep
+read.csv("~/Downloads/Fitabase Data 4.12.16-5.12.16/weightLogInfo_merged.csv") -> weight
+read.csv("~/Downloads/Fitabase Data 4.12.16-5.12.16/hourlyIntensities_merged.csv") -> intensities
+```
+
+## Look at the summaries of the datasets
+```{r}
+head(activity)
+head(calories)
+head(dailySteps)
+head(hourlySteps)
+head(sleep)
+head(weight)
+head(intensities)
+```
+
+## Splitting the Date and Time into two separate columns in the dataset so that it's easier to analyze
+```{r}
+calories$ActivityHour = as.POSIXct(calories$ActivityHour, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone())
+calories$Day = format(calories$ActivityHour, format = "%m/%d/%Y")
+calories$Time = format(as.POSIXct(calories$ActivityHour),format = "%H:%M:%S")
+
+hourlySteps$ActivityHour = as.POSIXct(hourlySteps$ActivityHour, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone())
+hourlySteps$Day = format(hourlySteps$ActivityHour, format = "%m/%d/%Y")
+hourlySteps$Time = format(as.POSIXct(hourlySteps$ActivityHour),format = "%H:%M:%S")
+
+sleep$SleepDay = as.POSIXct(sleep$SleepDay, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone())
+sleep$Day = format(sleep$SleepDay, format = "%m/%d/%Y")
+sleep$Time = format(as.POSIXct(sleep$SleepDay), format("%H:%M:%S"))
+
+intensities$ActivityHour = as.POSIXct(intensities$ActivityHour, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone())
+intensities$Day = format(intensities$ActivityHour, format="%m/%d/%Y")
+intensities$Time = format(as.POSIXct(intensities$ActivityHour), format = "%H:%M:%S")
+
+weight$Date = as.POSIXct(weight$Date, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone())
+weight$Day = format(weight$Date, format = "%m/%d/%Y")
+weight$Time = format(as.POSIXct(weight$Date), format("%H:%M:%S"))
+
+activity$ActivityDate = as.POSIXct(activity$ActivityDate, format="%m/%d/%Y", tz=Sys.timezone())
+activity$Day = format(activity$ActivityDate, format="%m/%d/%Y")
+activity$Time = format(as.POSIXct(activity$ActivityDate), format("%H:%M:%S"))
+```
+
+# Documentation of Cleaning and Manipulating Data
+I wanted to make sure that each of the data sets had a good amount of users show their data, so I counted how many users were there for each data set
+```{r}
+n_distinct(activity$Id) # 33
+n_distinct(calories$Id) # 33
+n_distinct(dailySteps$Id) # 33
+n_distinct(hourlySteps$Id) # 33
+n_distinct(sleep$Id) # 24
+n_distinct(weight$Id) # 8
+n_distinct(intensities$Id) # 33
+```
+
+The weight dataset only had 8 users, which wasn't a significant enough number to use in my data analysis. Either users are simply not tracking their weight, or they are tracking it, but not in the FitBit app. Bellabeat can make it easier for the user to track their weight on their app, or create a scale that connects to the app so users don't have to manually type in thier weight every time.
+
+Since the other data sets have more than 24 people, which is about 80% of the people who participated, we can move on with our analysis.
+
+First, I wanted to see how much sleep users got on average, so I created a summary table to help me see the statistics of the total amount of sleep each user got.
+
+```{r}
+sleep %>%
+  select(TotalMinutesAsleep) %>%
+  summary()
+```
+The data shows that people are getting about 6-8 hours of sleep daily, but there's a couple of users who have been getting less than 6 hours or more than 8 hours on some days, which is bad for their sleep schedule, since the WHO recommends about 6-8 hours per day to stay healthy.
+
+I wanted to look at the sleep data and combine it with the sedentary minutes from the activity database.
+```{r joining sleep and activities}
+sleep_activities <- merge(sleep, activity, by=c("Id", "Day"))
+```
+
+This lets us see how sleep and daily activity correlate with each other. If we try to graph total minutes asleep with sedentary minutes in a day, we see that they have a negative relationship, meaning that lower sedentary minutes leads to more sleep.
+
+```{r graph}
+ggplot(data = sleep_activities) + 
+  geom_point(mapping = aes(x = TotalMinutesAsleep, y = SedentaryMinutes))
+```
+
+What this could mean for Bellabeat is that their app and trackers should remind the user to get up and maybe walk around throughout the day so that they don't end up sitting in one place for a good amount of the day.
+
+I also wanted to see how the users slept for the month that the data showed, and while the users generally had the same amount of sleep everyday, there were a couple days where the user got a lot more or a lot less sleep.
+```{r sleep by day by user}
+ggplot(data = sleep) + 
+  geom_point(mapping = aes(x = SleepDay, y = TotalMinutesAsleep)) + 
+  facet_wrap(~Id)
+```
+
+I also wanted to see how long it takes users to go to sleep after going to bed. 
+
+```{r total minutes asleep vs. total minutes in bed}
+ggplot(data = sleep) + 
+  geom_point(mapping = aes(x = TotalTimeInBed, y = TotalMinutesAsleep))
+```
+
+While this trend is has a positive linear relationship, some users have been going to sleep a lot later than when they have gone to bed, resulting in less sleep time or waking up a lot later in the day.
+
+I wanted to see if the amount of sleep that the user get affects the amount of "Very Active Minutes" they have throughout a day. The percent slept measures the percentage of the time they are asleep after they have gone to bed.
+
+```{r percentage slept}
+sleep_activities$percentSlept = sleep$TotalMinutesAsleep / sleep$TotalTimeInBed
+
+ggplot(data = sleep_activities) + 
+  geom_smooth(mapping = aes(x = percentSlept, y = VeryActiveMinutes)) +
+  geom_point(mapping = aes(x = percentSlept, y = VeryActiveMinutes))
+```
+
+While this graph isn't linear, it does show that when users sleep for more than 90% of the time after they have gone to bed, they tend to have a higher amount of "Very Active Minutes".
+
+Potential for Bellabeat: if the user is trying to control the amount of sleep that they get everyday, Bellabeat could have reminders to tell the user to go to sleep and to put their phone up. They could have health reminders about how the blue light from smart devices affects sleep patterns so that they can be educated on the matter and make better health decisions. 
+
+Next I decided to look at the calories and how many users were on average were burning off different amounts of calories so that we could get a good look at who our user base is. First I summed the amount of calories they were burning off in a day and put that into a dataset called dailyCalories.
+
+```{r calorie users}
+dailyCalories <- calories %>% group_by(Id, Day) %>% drop_na() %>% summarize(sum_calories = sum(Calories))
+n_distinct(dailyCalories$Id)  
+```
+
+Next I created another dataset called averageCalories that contained the average calories burned per user. 
+
+```{r}
+averageCalories <- dailyCalories %>% group_by(Id) %>% drop_na() %>% summarize(mean_calorie = mean(sum_calories))
+
+ggplot(data = averageCalories) +
+  geom_histogram(mapping = aes(x = mean_calorie, fill = Id), bins = 5)
+```
+
+This shows that most users burn about ~2000 calories per day or more, suggesting that the users are trying to stay fit or trying to lose weight. What this would mean for Bellabeat is adding exercise routines through their app so that the users can stay motivated to reach their fitness goals.
+
+I looked at the intensity data to see if there was a correlation in how intense the activity was and the time of day. I split the intensity levels into 3, with an intensity level of 0-20 being "Light", 20-80 being "Medium", and anything above an 80 as "High"
+
+```{r}
+intensities_mod <- intensities %>% mutate(IntenseLevels = case_when (TotalIntensity <= 20 ~ "Light", TotalIntensity > 20 & TotalIntensity <= 80 ~ "Medium", TotalIntensity > 80 ~ "High"))
+```
+
+I did this to see how active users were throughout the day, and I graphed it, with the time on the X axis and the number of minutes on the Y axis, splitting the bars among the various intensity levels.
+
+```{r}
+ggplot(data = intensities_mod) +
+  geom_bar(mapping = aes(x = Time, fill = IntenseLevels))
+```
+
+I wanted to check how this data correlates with how many steps people took throughout the day. I decided that if it was less than 400 steps that hour, it would be "Light", between 400-800 is "Medium", and anything above 800 is "High". 
+
+```{r}
+hourlySteps_mod <- hourlySteps %>% mutate (Levels = case_when (StepTotal <= 400 ~ "Light", StepTotal > 400 & StepTotal <= 800 ~ "Moderate", StepTotal > 800 ~ "High"))
+
+ggplot(data = hourlySteps_mod) +
+  geom_bar(mapping = aes(x = Time, fill = Levels), position = "fill")
+```
+
+This graph shows that there's more steps are taken around 5pm, backing up the data shown by the intensity levels. The  Bellabeat app can send the user a reminder around this time to go to the gym or go on a walk/run, since this is also around the time many people will come back from their jobs and will have time to exercise.
+
+Lastly, I wanted to see how active the users were on average daily throughout the month, and I calculated the daily average steps they took everyday for the month, and organized the users into three different groups. If the user had less than 4,000 steps everyday, they were "Light", between 4,000 and 9,000 was considered "Moderate", and anything above 9,000 was "High". 
+
+```{r}
+avgDailySteps <- dailySteps %>% group_by(Id) %>% summarize(avgStepCount = mean(StepTotal))
+head(avgDailySteps)
+
+dailySteps_mod <- avgDailySteps %>% mutate(UserLevel = case_when (avgStepCount <= 4000 ~ "Light", avgStepCount >4000 & avgStepCount < 9000 ~ "Moderate", avgStepCount >= 9000 ~ "High"))
+
+ggplot(data = dailySteps_mod) + 
+  geom_bar(mapping = aes(x = UserLevel, fill = UserLevel))
+```
+With this data I learned that most of the users were moderate, tracking about 4,000-9,000 steps everyday. This could suggest that the users are trying to make sure that they stay active everyday, even though the WHO recommends that the average person gets about 10,000 steps everyday.
+
+
+# High Level Recommendations
+1. Have exercise routines within the app that correlate to different intensity levels so that users can hit their daily recommended amount of active minutes.
+2. Set reminders on the app around 5pm and 6pm in the case that the user doesn't hit their 10,000 step goal for the day so that the user can get up and get their steps.
+3. Depending on the goal for the user, the app can have animations to help motivate the user to exercise or to celebrate achieving their goals so that they can continue to exercise and stay healthy. 
+4. Since there is correlation between the amount of sleep the users get and how active they are throughout the day, the app can show a pop-up box explaining how looking at devices before sleeping can cause an unhealthy sleep schedule, allowing the user to make better health-related decisions.
